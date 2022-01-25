@@ -193,7 +193,7 @@ class FeeCrawler():
         }
         return [k for k, v in necessary_datas.items() if v is None]
 
-    def query_crt_fee(self, cargo, start_stn_load=False, end_stn_discharge=False):
+    def query_crt_fee_by_cargo(self, cargo, start_stn_load=False, end_stn_discharge=False):
         missing_properties = self.get_missing_properties()
         if any(missing_properties):
             raise KeyError(f'following properties are not ready:{missing_properties}')

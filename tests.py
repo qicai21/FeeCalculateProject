@@ -68,7 +68,7 @@ class CrawlerTest(unittest.TestCase):
         crl = FeeCrawler()
         crl.set_start_station('高桥镇')
         crl.set_end_station('四平')
-        result = crl.query_crt_fee('尿素(化肥)')
+        result = crl.query_crt_fee_by_cargo('尿素(化肥)')
         bulk_freight_ttl = result[0]['totalCost']
         self.assertEqual(float(bulk_freight_ttl), 3812.10)
 
