@@ -7,11 +7,9 @@ import time
 class FeeCrawler():
     def __init__(self, delay=0):
         self.delay = delay
-        self.headers = None
         self.query_code = None
         self.cookie = None
         self.token = None
-        self.refresh_query_code_and_cookie()
 
         # for post data:
         self.start_lj_data = None
@@ -32,6 +30,7 @@ class FeeCrawler():
 
         self.start_station_load_fee = '0'
         self.end_station_discharge_fee = '0'
+        self.refresh_query_code_and_cookie()
 
     def refresh_query_code_and_cookie(self):
         url = 'https://ec.95306.cn/api/gxzx/verfication/query'
@@ -176,13 +175,32 @@ class FeeCrawler():
         }
         return data
 
-    def query_crt_fee(self, start_station, end_station, cargo, start_stn_load=False, end_stn_discharge=False):
+    def get_missing_properties(self):
+        necessary_datas = {
+            'query_code': self.query_code,
+            'cookie': self.cookie,
+            'token': self.token,
+            'start_lj_data': self.start_lj_data,
+            'start_lj_code': self.start_lj_code,
+            'start_station_name': self.start_station_name,
+            'start_station_code': self.start_station_code,
+            'start_station_data': self.start_station_data,
+            'end_lj_data': self.end_lj_data,
+            'end_lj_code': self.end_lj_code,
+            'end_station_name': self.end_station_name,
+            'end_station_code': self.end_station_code,
+            'end_station_data': self.end_station_data
+        }
+        return [k for k, v in necessary_datas.items() if v is None]
+
+    def query_crt_fee(self, cargo, start_stn_load=False, end_stn_discharge=False):
+        missing_properties = self.get_missing_properties()
+        if any(missing_properties):
+            raise KeyError(f'following properties are not ready:{missing_properties}')
         if start_stn_load:
             self.start_station_load_fee = '1'
         if end_stn_discharge:
             self.end_station_discharge_fee = '1'
-        self.set_start_station(start_station)
-        self.set_end_station(end_station)
         self.set_cargo(cargo)
         data = self.get_post_data()
         length = len(json.dumps(data, ensure_ascii=False)) + 10
@@ -192,8 +210,7 @@ class FeeCrawler():
         if resp.status_code != 200 or resp.json()['msg'] != 'OK':
             print(f'查询失败!return code: {resp.status_code}. retrun msg:{resp.json()["msg"]}')
             return None
-        return resp.json()['data']
-
+        return resp.json()['data']['freightVoNewList']
 
 
 def make_random_cookie():
