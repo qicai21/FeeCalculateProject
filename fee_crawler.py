@@ -4,6 +4,29 @@ import random
 import time
 
 
+def wait_for(condition_func):
+    def wrap(*args, **kwargs):
+        delay = 0.5
+        max_delay = 2
+        inner_exp_msg = None
+        while delay < max_delay:
+            try:
+                if condition_func(*args, **kwargs):
+                    return True
+                time.sleep(delay)
+                delay += 0.1
+            except KeyError as exp:
+                inner_exp_msg = str(exp)
+                time.sleep(delay)
+                delay += 0.1
+        inner_exp_msg = '执行多次均未能刷新' if not inner_exp_msg else inner_exp_msg
+        raise Exception(
+            '执行{}超时,错误信息如下:'.format(condition_func.__name__), inner_exp_msg
+        )
+    return wrap
+
+
+
 class FeeCrawler():
     def __init__(self, delay=0):
         self.delay = delay
@@ -30,21 +53,30 @@ class FeeCrawler():
 
         self.start_station_load_fee = '0'
         self.end_station_discharge_fee = '0'
-        self.refresh_query_code_and_cookie()
 
+        self.used_query_codes = []
+        self.used_tokens = []
+        self.refresh_query_code_and_cookie()
+ 
+    @wait_for
     def refresh_query_code_and_cookie(self):
         url = 'https://ec.95306.cn/api/gxzx/verfication/query'
         resp = requests.post(url, data={})
-        if resp.status_code == 200:
-            session = resp.headers['Set-Cookie'].split(';')[0]
-            self.cookie = f'95306-1.6.10-loginType=outer;{session}'
-            self.query_code = resp.json()['data']['randomCode']
-            self.token = resp.json()['data']['code']
-            if self.delay > 0:
-                time.sleep(self.delay)
-                print(f'refresh successful, Code:{self.query_code}')
-        else:
-            print(f'refresh code&cookie failed, status_code:{resp.status_code}')
+        if resp.status_code != 200:
+            raise KeyError('刷新cookie返回了{}'.format(resp.status_code))
+        if resp.json()['msg'] != 'OK':
+            raise KeyError('刷新cookie失败:{}'.format(resp.json()['msg']))
+        query_code = resp.json()['data']['randomCode']
+        token = resp.json()['data']['code']
+        if query_code in self.used_query_codes or token in self.used_tokens:
+            return False
+        session = resp.headers['Set-Cookie'].split(';')[0]
+        self.cookie = f'95306-1.6.10-loginType=outer;{session}'
+        self.query_code = query_code
+        self.token = token
+        self.used_tokens.append(token)
+        self.used_query_codes.append(query_code)
+        return True
 
     def send_cargo_name_request(self, name):
         data = {'q': name, 'limit': "50", 'isShieldYsfs': 'true'}
