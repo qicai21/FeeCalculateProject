@@ -11,6 +11,22 @@ class CalculatorTest(unittest.TestCase):
         self.assertEqual(cal.jj_mile, 460)
         self.assertEqual(cal.dqh_mile, 460)
 
+    def test_calculator_create_diff_freight_list_by_station(self):
+        cal = FeeCalculator()
+        cal.set_from_to_stations('四平', '沙岗')
+        freight_list_1 = cal.freight_list
+        jjlc_1 = cal.jj_mile
+        cal.set_from_to_stations('四平', '鲅鱼圈北')
+        freight_list_2 = cal.freight_list
+        jjlc_2 = cal.jj_mile
+        self.assertNotEqual(freight_list_1, freight_list_2)
+        self.assertEqual(jjlc_2 - jjlc_1, 14)
+
+    def test_guonei_station_raise_notimplementederror(self):
+        cal = FeeCalculator()
+        with self.assertRaises(NotImplementedError):
+            cal.set_from_to_stations('四平', '古冶')
+
 
 class CrawlerTest(unittest.TestCase):
     @unittest.skip('确定成功')
