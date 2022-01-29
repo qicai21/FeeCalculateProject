@@ -4,6 +4,7 @@ from fee_calculator import FeeCalculator
 
 
 class CalculatorTest(unittest.TestCase):
+    @unittest.skip('确定成功')
     def test_can_get_correct_miles_args(self):
         cal = FeeCalculator()
         cal.set_from_to_stations('高桥镇', '四平')
@@ -11,6 +12,7 @@ class CalculatorTest(unittest.TestCase):
         self.assertEqual(cal.jj_mile, 460)
         self.assertEqual(cal.dqh_mile, 460)
 
+    @unittest.skip('确定成功')
     def test_calculator_create_diff_freight_list_by_station(self):
         cal = FeeCalculator()
         cal.set_from_to_stations('四平', '沙岗')
@@ -22,10 +24,23 @@ class CalculatorTest(unittest.TestCase):
         self.assertNotEqual(freight_list_1, freight_list_2)
         self.assertEqual(jjlc_2 - jjlc_1, 14)
 
+    @unittest.skip('确定成功')
     def test_guonei_station_raise_notimplementederror(self):
         cal = FeeCalculator()
         with self.assertRaises(NotImplementedError):
             cal.set_from_to_stations('四平', '古冶')
+
+    def test_calculator_get_correct_freight(self):
+        start = '元宝山'
+        end = '金帛湾'
+        cargo = '矿渣'
+        carriage = 'bulk'
+        quantity = 70
+        cal = FeeCalculator()
+        cal.set_from_to_stations(start, end)
+        freight = cal.get_freight(cargo, carriage, quantity)
+        diff = abs(freight - (3322 + 1.8 + 1005.1 + 556.5))
+        self.assertTrue(diff < 0.2)
 
 
 class CrawlerTest(unittest.TestCase):

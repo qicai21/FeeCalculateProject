@@ -12,19 +12,55 @@ LOCAL_STATIONS = {
     '珲春南': '图们',
 }
 
+PRICE_TABLE = {
+    'bulk_2': [9.5, 0.086, 0.033, 0.007],
+    'bulk_3': [12.8, 0.091, 0.033, 0.007],
+    'bulk_4': [16.3, 0.098, 0.033, 0.007],
+    'bulk_5': [18.6, 0.103, 0.033, 0.007],
+    'bulk_6': [26, 0.138, 0.033, 0.007],
+    'T20': [440, 3.185, 0.528, 0.112],
+    'T40': [532, 3.357, 1.122, 0.238]
+}
+
 class FeeCalculator:
     def __init__(self):
+        self.crawler = FeeCrawler()
         self.available_ljdm = ['B00', 'T00']  # 目前只支持沈哈两局
         self.freight_list = None
-        self.start_station = None
         self.query_stations = None
+        self.start_station = None
         self.end_station = None
         self.guotie_mile = 0
         self.jj_mile = 0
         self.dqh_mile = 0
-        self.crawler = FeeCrawler()
         self.cargo = ''
+        self.cargo_data = None
+        self.quantity = 0
         self.carriage = None
+        self.guotie_price_1 = 0
+        self.guotie_price_2 = 0
+        self.jj_price = 0
+        self.dqh_price = 0
+
+    def get_freight(self, cargo, carriage, quantity):
+        self.cargo_data = self.crawler.query_cargo_by_name(cargo)
+        self.cargo = self.cargo_data['pmhz']
+        self.carriage = carriage
+        self.quantity = quantity
+        if carriage in ['T20', 'T40']:
+            key = carriage
+        else:
+            key = 'bulk_' + self.cargo_data['zcjh']
+        self.guotie_price_1, self.guotie_price_2, self.jj_price, self.dqh_price = PRICE_TABLE[key]
+        result = [cal_func() for cal_func in self.freight_list]
+        stamp_duty = get_stamp_duty(result)
+        result.append(stamp_duty)
+        ttl_freight = 0
+        for i in result:
+            ttl_freight += i[1]
+        print(result)
+        print(f'ttl freight: {ttl_freight}')
+        return ttl_freight
 
     def set_from_to_stations(self, start_station=None, end_station=None):
         if start_station is None and end_station is None:
@@ -52,15 +88,24 @@ class FeeCalculator:
             self.append_hunchunnan_freight()
 
     def append_jinbowan_freight(self):
-        if self.carriage != 'bulk':
-            raise KeyError('不支持的运输类型,待完善.')
         if self.carriage == 'T20':
-            fee = 198 * self.quantity
+            self.freight_list.append(self.jinbowan_t20_freight)
         elif self.cargo in COAL_LIST:
-            fee = 612.2 / 70 * self.quantity
+            self.freight_list.append(self.jinbowan_coal_freight)
         else:
-            fee = 556.5 / 70 * self.quantity
-        self.freight_list.append(lambda: {'金渤运费': fee})
+            self.freight_list.append(self.jinbowan_general_freight)
+
+    def jinbowan_t20_freight(self):
+        fee = 198 * self.quantity
+        return ['金渤运费', fee]
+
+    def jinbowan_coal_freight(self):
+        fee = 612.2 / 70 * self.quantity
+        return ['金渤运费', fee]
+
+    def jinbowan_general_freight(self):
+        fee = 556.5 / 70 * self.quantity
+        return ['金渤运费', fee]
 
     def append_hunchunnan_freight(self):
         raise NotImplementedError('珲春南的待完善.')
@@ -74,13 +119,13 @@ class FeeCalculator:
     def append_gaoqianzhen_start_freight(self):
         # 高桥镇发出货物,增加货车占用费,煤炭16小时,其他8小时.
         hrs = 16 if self.cargo in COAL_LIST else 8
-        self.freight_list.append(lambda: {'货车占用费': hrs * 5.7})
+        self.freight_list.append(lambda: ['货车占用费', hrs * 5.7])
        
     def byq_fee(self):
-        price = self.guotie_price[1] + self.dqh_price
+        price = self.guotie_price_2 + self.dqh_price
         fee = price * 14 * self.quantity * self.get_discount()
         fee = round(fee, 1)
-        return {'沙鲅运费': fee}
+        return ['沙鲅运费', fee]
 
     def raise_error_if_station_outof_dongbei(self, stations):
         for st in stations:
@@ -104,9 +149,9 @@ class FeeCalculator:
         return float(fee[0])
 
     def cal_guotie_fee(self):
-        price = self.guotie_price[0] + self.guotie_price[1] * self.guotie_mile
+        price = self.guotie_price_1 + self.guotie_price_2 * self.guotie_mile
         fee = price * self.quantity * self.get_discount()
-        return {'国铁正线运费': round(fee, 1)}
+        return ['国铁正线运费', round(fee, 1)]
         
     def get_discount(self):
         if self.carriage == 'T20':
@@ -123,11 +168,11 @@ class FeeCalculator:
         if '化肥' in self.cargo:
             return 0
         fee = self.jj_price * self.jj_mile * self.quantity * self.get_discount()
-        return {'建设基金': round(fee, 1)}
+        return ['建设基金', round(fee, 1)]
 
     def cal_dqh_fee(self):
         fee = self.dqh_price * self.dqh_mile * self.quantity
-        return {'电气化费': round(fee, 1)}
+        return ['电气化费', round(fee, 1)]
 
 
 def get_guotie_mile(tks_fee, kz_fee):
@@ -147,6 +192,22 @@ def get_dqh_mile(guotie_mile, nsh_fee):
     guotie_fee = (p_1 + p_2 * guotie_mile) * (1 - 1.78 / 100)
     mile = (nsh_fee / 60 - guotie_fee) / p_dqh
     return int(round(mile, 0))
+
+
+def get_stamp_duty(freight_list):
+    sum_ = 0
+    for i in freight_list:
+        if i[0] == '建设基金':
+            continue
+        if '装卸费' in i[0]:
+            sum_ += round(i[1] / 106 * 100, 2)
+        else:
+            sum_ += round(i[1] / 109 * 100, 2)
+    duty = round(sum_ * 5 / 10000, 1)
+    return ['印花税', duty]
+
+
+
 
 
 if __name__ == '__main__':
