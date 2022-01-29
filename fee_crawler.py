@@ -2,6 +2,29 @@ import requests
 import json
 import random
 import time
+from enum import Enum
+
+
+KZ_Data = {
+    'dm': '0898003', 'pym': 'KZ', 'pmhz': '矿渣', 'ldjh': '21',
+    'wpdm': 'null', 'jzz': 'null', 'ifszjf': 'null', 'plhz': 'null',
+    'jzxjh': '0', 'zcjh': '2', 'shpmsspmdm': '0898003', 'ifshpm': '0',
+    'shpmhz': '矿渣', 'shpmpym': 'KZ'
+}
+
+TKS_Data = {
+    "dm": "0410013", "pym": "TKS", "pmhz": "铁矿石", "ldjh": "21",
+    'wpdm': 'null', 'jzz': 'null', 'ifszjf': 'null', 'plhz': 'null',
+    "jzxjh": "0", "zcjh": "4", "shpmsspmdm": "0410013", "ifshpm": "0",
+    "shpmhz": "铁矿石", "shpmpym": "TKS"
+}
+
+NSH_Data = {
+    'dm': '1310013', 'pym': 'NSH', 'pmhz': '尿素(化肥)', 'ldjh': '21',
+    'wpdm': 'null', 'jzz': 'null', 'ifszjf': 'null', 'plhz': 'null',
+    'jzxjh': '0', 'zcjh': '4', 'shpmsspmdm': '1310013', 'ifshpm': '0',
+    'shpmhz': '尿素(化肥)', 'shpmpym': 'NSH'
+}
 
 
 def wait_for(condition_func):
@@ -11,8 +34,9 @@ def wait_for(condition_func):
         inner_exp_msg = None
         while delay < max_delay:
             try:
-                if condition_func(*args, **kwargs):
-                    return True
+                result = condition_func(*args, **kwargs)
+                if result:
+                    return result
                 time.sleep(delay)
                 delay += 0.1
             except KeyError as exp:
@@ -24,7 +48,6 @@ def wait_for(condition_func):
             '执行{}超时,错误信息如下:'.format(condition_func.__name__), inner_exp_msg
         )
     return wrap
-
 
 
 class FeeCrawler():
@@ -167,11 +190,44 @@ class FeeCrawler():
                 new_name = select
                 return self.query_cargo_by_name(new_name)
 
-    def set_cargo(self, name):
+    def set_cargo_by_name(self, name):
         resp_data = self.query_cargo_by_name(name)
         self.cargo_name = resp_data['pmhz']
         self.cargo_data = resp_data
         self.cargo_code = resp_data['dm']
+
+    def set_cargo_by_data(self, cargo_data):
+        self.cargo_data = cargo_data
+        self.cargo_name = cargo_data['pmhz']
+        self.cargo_code = cargo_data['dm']
+
+    @wait_for
+    def query_calculate_base_fee(self, cargo):
+        self.refresh_query_code_and_cookie()
+        # check property ready
+        missing_properties = self.get_missing_properties()
+        if any(missing_properties):
+            raise KeyError(f'following properties are not ready:{missing_properties}')
+        # set post data
+        if cargo == '矿渣':
+            self.set_cargo_by_data(KZ_Data)
+        elif cargo == '铁矿石':
+            self.set_cargo_by_data(TKS_Data)
+        elif cargo == '尿素(化肥)':
+            self.set_cargo_by_data(NSH_Data)
+        else:
+            raise KeyError('cargo 不正确,请输入:矿渣,铁矿石, 尿素(化肥)')
+        data = self.get_post_data()
+        # set headers
+        length = len(json.dumps(data, ensure_ascii=False)) + 10
+        headers = create_headers_by(length, self.cookie)
+        url = 'https://ec.95306.cn/api/zx/businessFor/carriageCalculateNew'
+        resp = requests.post(url, headers=headers, json=data)
+        if resp.status_code != 200 or resp.json()['msg'] != 'OK':
+            msg = f'查询失败!return code: {resp.status_code}. retrun msg:{resp.json()["msg"]}'
+            raise KeyError(msg)
+        freight_list = resp.json()['data']['freightVoNewList']
+        return freight_list
 
     def get_post_data(self):
         data = {
@@ -233,7 +289,7 @@ class FeeCrawler():
             self.start_station_load_fee = '1'
         if end_stn_discharge:
             self.end_station_discharge_fee = '1'
-        self.set_cargo(cargo)
+        self.set_cargo_by_name(cargo)
         data = self.get_post_data()
         length = len(json.dumps(data, ensure_ascii=False)) + 10
         headers = create_headers_by(length, self.cookie)

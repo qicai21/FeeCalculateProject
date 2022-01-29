@@ -1,5 +1,15 @@
 import unittest
 from fee_crawler import FeeCrawler
+from fee_calculator import FeeCalculator
+
+
+class CalculatorTest(unittest.TestCase):
+    def test_can_get_correct_miles_args(self):
+        cal = FeeCalculator()
+        cal.set_from_to_stations('高桥镇', '四平')
+        self.assertEqual(cal.guotie_mile, 460)
+        self.assertEqual(cal.jj_mile, 460)
+        self.assertEqual(cal.dqh_mile, 460)
 
 
 class CrawlerTest(unittest.TestCase):
@@ -64,6 +74,7 @@ class CrawlerTest(unittest.TestCase):
         self.assertIsNotNone(data['code'])
         self.assertIsNotNone(data['token'])
 
+    @unittest.skip
     def test_query_crt_fee_successful(self):
         crl = FeeCrawler()
         crl.set_start_station('高桥镇')
