@@ -37,9 +37,11 @@ class CalculatorTest(unittest.TestCase):
         carriage = 'bulk'
         quantity = 70
         cal = FeeCalculator()
-        cal.set_from_to_stations(start, end)
-        freight = cal.get_freight(cargo, carriage, quantity)
-        diff = abs(freight - (3322 + 1.8 + 1005.1 + 556.5))
+        freight = cal.get_freight(start, end, cargo, carriage, quantity)
+        estimate_freight = 3322 + 1.8 + 1005.1 + 556.5
+        # cal.set_from_to_stations(start, end)
+        # freight = cal.get_freight(cargo, carriage, quantity)
+        diff = abs(freight - estimate_freight)
         self.assertTrue(diff < 0.2)
 
 

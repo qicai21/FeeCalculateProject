@@ -22,7 +22,8 @@ PRICE_TABLE = {
     'T40': [532, 3.357, 1.122, 0.238]
 }
 
-class FeeCalculator:
+
+class FeeCalculator:  # pylint: disable-msg=too-many-instance-attributes
     def __init__(self):
         self.crawler = FeeCrawler()
         self.available_ljdm = ['B00', 'T00']  # 目前只支持沈哈两局
@@ -42,7 +43,22 @@ class FeeCalculator:
         self.jj_price = 0
         self.dqh_price = 0
 
-    def get_freight(self, cargo, carriage, quantity):
+    def get_freight(self, start, end, cargo, carriage, quantity, discount=0):  # pylint: disable-msg=too-many-arguments
+        if self.query_stations is None:
+            self.set_from_to_stations(start, end)
+        elif self.query_stations[0] != start and self.query_stations[1] == end:
+            self.set_from_to_stations(start, None)
+        elif self.query_stations[0] == start and self.query_stations[1] != end:
+            self.set_from_to_stations(None, end)
+        elif self.query_stations[0] != start and self.query_stations[1] != end:
+            self.set_from_to_stations(start, end)
+        else:
+            pass
+        # 之后补全discount的相关部分
+        discount = 1 - discount
+        return self.get_freight_of_current_stations(cargo, carriage, quantity)
+
+    def get_freight_of_current_stations(self, cargo, carriage, quantity):
         self.cargo_data = self.crawler.query_cargo_by_name(cargo)
         self.cargo = self.cargo_data['pmhz']
         self.carriage = carriage
@@ -128,10 +144,10 @@ class FeeCalculator:
         return ['沙鲅运费', fee]
 
     def raise_error_if_station_outof_dongbei(self, stations):
-        for st in stations:
-            station_data = self.crawler.query_station_by_name(st)
+        for stn in stations:
+            station_data = self.crawler.query_station_by_name(stn)
             if station_data['ljdm'] not in self.available_ljdm:
-                raise NotImplementedError(f'{st}是关内站,暂不支持.')
+                raise NotImplementedError(f'{stn}是关内站,暂不支持.')
         return True
 
     def update_mile_args_by_crawler_and_reset_frieght_list(self):
@@ -205,9 +221,6 @@ def get_stamp_duty(freight_list):
             sum_ += round(i[1] / 109 * 100, 2)
     duty = round(sum_ * 5 / 10000, 1)
     return ['印花税', duty]
-
-
-
 
 
 if __name__ == '__main__':
