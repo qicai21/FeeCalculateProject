@@ -2,7 +2,6 @@ import requests
 import json
 import random
 import time
-from enum import Enum
 
 
 KZ_Data = {
@@ -148,27 +147,35 @@ class FeeCrawler():
             return None
         return resp_json['data'][0]
 
-    def set_start_station(self, name):
+    def set_start_station(self, name, limited_lj=None):
         resp_data = self.query_station_by_name(name)
         self.start_station_code = resp_data['dbm']
         self.start_station_name = resp_data['hzzm']
         self.start_station_data = resp_data
         self.start_lj_code = resp_data['ljm']
         start_lj_name = resp_data['ljqc']
-        data = self.send_lj_request(start_lj_name)
-        if data:
-            self.start_lj_data = data
+        if limited_lj and start_lj_name not in limited_lj:
+            raise AttributeError(f'{name} 不是{limited_lj}中的站.')
+        lj_data = self.send_lj_request(start_lj_name)
+        if lj_data:
+            self.start_lj_data = lj_data
+        else:
+            raise AttributeError('路局数据获取失败')
 
-    def set_end_station(self, name):
+    def set_end_station(self, name, limited_lj=None):
         resp_data = self.query_station_by_name(name)
         self.end_station_code = resp_data['dbm']
         self.end_station_name = resp_data['hzzm']
         self.end_station_data = resp_data
         self.end_lj_code = resp_data['ljm']
         end_lj_name = resp_data['ljqc']
+        if limited_lj and end_lj_name not in limited_lj:
+            raise AttributeError(f'{name} 不是{limited_lj}中的站.')
         data = self.send_lj_request(end_lj_name)
         if data:
             self.end_lj_data = data
+        else:
+            raise AttributeError('路局数据获取失败')
 
     def query_cargo_by_name(self, name):
         cargo = self.send_cargo_name_request(name)

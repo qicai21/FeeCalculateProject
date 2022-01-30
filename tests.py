@@ -34,13 +34,10 @@ class CalculatorTest(unittest.TestCase):
         start = '元宝山'
         end = '金帛湾'
         cargo = '矿渣'
-        carriage = 'bulk'
-        quantity = 70
+        carriage = 'C70'
         cal = FeeCalculator()
-        freight = cal.get_freight(start, end, cargo, carriage, quantity)
+        freight = cal.get_freight(start, end, cargo, carriage)
         estimate_freight = 3322 + 1.8 + 1005.1 + 556.5
-        # cal.set_from_to_stations(start, end)
-        # freight = cal.get_freight(cargo, carriage, quantity)
         diff = abs(freight - estimate_freight)
         self.assertTrue(diff < 0.2)
 
@@ -115,7 +112,6 @@ class CrawlerTest(unittest.TestCase):
         result = crl.query_crt_fee_by_cargo('尿素(化肥)')
         bulk_freight_ttl = result[0]['totalCost']
         self.assertEqual(float(bulk_freight_ttl), 3812.10)
-
 
 
 if __name__ == '__main__':

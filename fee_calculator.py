@@ -22,11 +22,20 @@ PRICE_TABLE = {
     'T40': [532, 3.357, 1.122, 0.238]
 }
 
+QUANTITY_TABLE = {
+    'T20': 2,
+    'T40': 1,
+    'C60': 60,
+    'C61': 61,
+    'C70': 70,
+    'TBJU35': 64
+}
+
 
 class FeeCalculator:  # pylint: disable-msg=too-many-instance-attributes
     def __init__(self):
         self.crawler = FeeCrawler()
-        self.available_ljdm = ['B00', 'T00']  # 目前只支持沈哈两局
+        self.available_lj = ['沈阳局', '哈尔滨局']  # 目前只支持沈哈两局
         self.freight_list = None
         self.query_stations = None
         self.start_station = None
@@ -36,14 +45,13 @@ class FeeCalculator:  # pylint: disable-msg=too-many-instance-attributes
         self.dqh_mile = 0
         self.cargo = ''
         self.cargo_data = None
-        self.quantity = 0
         self.carriage = None
         self.guotie_price_1 = 0
         self.guotie_price_2 = 0
         self.jj_price = 0
         self.dqh_price = 0
 
-    def get_freight(self, start, end, cargo, carriage, quantity, discount=0):  # pylint: disable-msg=too-many-arguments
+    def get_freight(self, start, end, cargo, carriage, discount=0):  # pylint: disable-msg=too-many-arguments
         if self.query_stations is None:
             self.set_from_to_stations(start, end)
         elif self.query_stations[0] != start and self.query_stations[1] == end:
@@ -56,13 +64,12 @@ class FeeCalculator:  # pylint: disable-msg=too-many-instance-attributes
             pass
         # 之后补全discount的相关部分
         discount = 1 - discount
-        return self.get_freight_of_current_stations(cargo, carriage, quantity)
+        return self.get_freight_of_current_stations(cargo, carriage)
 
-    def get_freight_of_current_stations(self, cargo, carriage, quantity):
+    def get_freight_of_current_stations(self, cargo, carriage):
         self.cargo_data = self.crawler.query_cargo_by_name(cargo)
         self.cargo = self.cargo_data['pmhz']
         self.carriage = carriage
-        self.quantity = quantity
         if carriage in ['T20', 'T40']:
             key = carriage
         else:
@@ -82,14 +89,13 @@ class FeeCalculator:  # pylint: disable-msg=too-many-instance-attributes
         if start_station is None and end_station is None:
             raise KeyError('start_station and end_station不能同时为None')
         self.query_stations = (start_station, end_station)
-        self.raise_error_if_station_outof_dongbei([start_station, end_station])
         if start_station:
             self.start_station = LOCAL_STATIONS.get(start_station, start_station)
-            self.crawler.set_start_station(self.start_station)
+            self.crawler.set_start_station(self.start_station, self.available_lj)
 
         if end_station:
             self.end_station = LOCAL_STATIONS.get(end_station, end_station)
-            self.crawler.set_end_station(self.end_station)
+            self.crawler.set_end_station(self.end_station, self.available_lj)
         self.update_mile_args_by_crawler_and_reset_frieght_list()
         self.set_freight_list()
     
@@ -112,15 +118,15 @@ class FeeCalculator:  # pylint: disable-msg=too-many-instance-attributes
             self.freight_list.append(self.jinbowan_general_freight)
 
     def jinbowan_t20_freight(self):
-        fee = 198 * self.quantity
+        fee = 198 * QUANTITY_TABLE[self.carriage]
         return ['金渤运费', fee]
 
     def jinbowan_coal_freight(self):
-        fee = 612.2 / 70 * self.quantity
+        fee = 612.2 / 70 * QUANTITY_TABLE[self.carriage]
         return ['金渤运费', fee]
 
     def jinbowan_general_freight(self):
-        fee = 556.5 / 70 * self.quantity
+        fee = 556.5 / 70 * QUANTITY_TABLE[self.carriage]
         return ['金渤运费', fee]
 
     def append_hunchunnan_freight(self):
@@ -139,7 +145,7 @@ class FeeCalculator:  # pylint: disable-msg=too-many-instance-attributes
        
     def byq_fee(self):
         price = self.guotie_price_2 + self.dqh_price
-        fee = price * 14 * self.quantity * self.get_discount()
+        fee = price * 14 * QUANTITY_TABLE[self.carriage] * self.get_discount()
         fee = round(fee, 1)
         return ['沙鲅运费', fee]
 
@@ -166,28 +172,32 @@ class FeeCalculator:  # pylint: disable-msg=too-many-instance-attributes
 
     def cal_guotie_fee(self):
         price = self.guotie_price_1 + self.guotie_price_2 * self.guotie_mile
-        fee = price * self.quantity * self.get_discount()
+        fee = price * QUANTITY_TABLE[self.carriage] * self.get_discount()
         return ['国铁正线运费', round(fee, 1)]
         
     def get_discount(self):
         if self.carriage == 'T20':
             return 1 - 0.9 / 100
-        if self.carriage == 'T35':
+        if self.carriage == 'TBJU35':
             return 1 - 0.89 / 100
-        if self.carriage != 'bulk':
+        if self.carriage not in ['C60', 'C61', 'C70']:
             raise KeyError('不支持的运输类型,待完善.')
         if self.cargo in COAL_LIST:
             return 1 + 8.04 / 100
         return 1 - 1.78 / 100
 
     def cal_jj_fee(self):
-        if '化肥' in self.cargo:
-            return 0
-        fee = self.jj_price * self.jj_mile * self.quantity * self.get_discount()
+        if (self.carriage in ['C60', 'C61', 'C70', 'TBJU35']) and ('化肥' in self.cargo):
+            return ['建设基金', 0]
+        fee = self.jj_price * self.jj_mile * QUANTITY_TABLE[self.carriage] * self.get_discount()
         return ['建设基金', round(fee, 1)]
 
     def cal_dqh_fee(self):
-        fee = self.dqh_price * self.dqh_mile * self.quantity
+        if self.carriage == 'T20':
+            return ['电气化费', 0.2 * QUANTITY_TABLE[self.carriage]]
+        if self.carriage == 'T40':
+            return ['电气化费', 0.4 * QUANTITY_TABLE[self.carriage]]
+        fee = self.dqh_price * self.dqh_mile * QUANTITY_TABLE[self.carriage]
         return ['电气化费', round(fee, 1)]
 
 
