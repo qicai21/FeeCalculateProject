@@ -37,7 +37,6 @@ class CalculatorTest(unittest.TestCase):
         carriage = 'C70'
         cal = FeeCalculator()
         freight = cal.get_freight(start, end, cargo, carriage)
-        print(freight)
         estimate_freight = 3322 + 1.8 + 1005.1 + 556.5
         diff = abs(freight['运费总价'] - estimate_freight)
         self.assertTrue(diff < 0.2)

@@ -150,7 +150,7 @@ class FeeCalculator:  # pylint: disable-msg=too-many-instance-attributes
        
     def byq_fee(self):
         price = self.guotie_price_2 + self.dqh_price
-        fee = price * 14 * QUANTITY_TABLE[self.carriage] * self.get_discount()
+        fee = price * 14 * QUANTITY_TABLE[self.carriage] * self.get_base_rate()
         fee = round(fee, 1)
         return ['沙鲅运费', fee]
 
@@ -177,10 +177,11 @@ class FeeCalculator:  # pylint: disable-msg=too-many-instance-attributes
 
     def cal_guotie_fee(self):
         price = self.guotie_price_1 + self.guotie_price_2 * self.guotie_mile
-        fee = price * QUANTITY_TABLE[self.carriage] * self.get_discount()
+        fee = price * QUANTITY_TABLE[self.carriage] * self.get_base_rate()
         return ['国铁正线运费', round(fee, 1)]
         
-    def get_discount(self):
+    def get_base_rate(self):
+        """基础费率,区别于下浮."""
         if self.carriage == 'T20':
             return 1 - 0.9 / 100
         if self.carriage == 'TBJU35':
@@ -194,7 +195,7 @@ class FeeCalculator:  # pylint: disable-msg=too-many-instance-attributes
     def cal_jj_fee(self):
         if (self.carriage in ['C60', 'C61', 'C70', 'TBJU35']) and ('化肥' in self.cargo):
             return ['建设基金', 0]
-        fee = self.jj_price * self.jj_mile * QUANTITY_TABLE[self.carriage] * self.get_discount()
+        fee = self.jj_price * self.jj_mile * QUANTITY_TABLE[self.carriage] * self.get_base_rate()
         return ['建设基金', round(fee, 1)]
 
     def cal_dqh_fee(self):
