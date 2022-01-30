@@ -81,9 +81,13 @@ class FeeCalculator:  # pylint: disable-msg=too-many-instance-attributes
         ttl_freight = 0
         for i in result:
             ttl_freight += i[1]
-        print(result)
-        print(f'ttl freight: {ttl_freight}')
-        return ttl_freight
+        ttl_freight = round(ttl_freight, 1)
+        freight_table = {
+            '运费总价': ttl_freight,
+        }
+        for i in result:
+            freight_table[i[0]] = i[1]
+        return freight_table
 
     def set_from_to_stations(self, start_station=None, end_station=None):
         if start_station is None and end_station is None:
@@ -103,7 +107,7 @@ class FeeCalculator:  # pylint: disable-msg=too-many-instance-attributes
         if '鲅鱼圈北' in self.query_stations:
             self.append_byq_freight()
         if self.query_stations[0] == '高桥镇':
-            self.append_gaoqianzhen_start_freight()
+            self.append_gaoqiaozhen_start_freight()
         if '金帛湾' in self.query_stations:
             self.append_jinbowan_freight()
         if '珲春南' in self.query_stations:
@@ -138,10 +142,11 @@ class FeeCalculator:  # pylint: disable-msg=too-many-instance-attributes
         # 其他鲅鱼圈费用
         self.freight_list.append(self.byq_fee)
 
-    def append_gaoqianzhen_start_freight(self):
-        # 高桥镇发出货物,增加货车占用费,煤炭16小时,其他8小时.
-        hrs = 16 if self.cargo in COAL_LIST else 8
-        self.freight_list.append(lambda: ['货车占用费', hrs * 5.7])
+    def append_gaoqiaozhen_start_freight(self):
+        # 高桥镇发出货物,增加货车占用费,煤炭和尿素化肥16小时,其他8小时,集装箱免收.
+        if self.carriage in ['C60', 'C61', 'C70']:
+            hrs = 16 if self.cargo in COAL_LIST else 16 if '化肥' in self.cargo else 8
+            self.freight_list.append(lambda: ['货车占用费', hrs * 5.7])
        
     def byq_fee(self):
         price = self.guotie_price_2 + self.dqh_price
@@ -194,11 +199,11 @@ class FeeCalculator:  # pylint: disable-msg=too-many-instance-attributes
 
     def cal_dqh_fee(self):
         if self.carriage == 'T20':
-            return ['电气化费', 0.2 * QUANTITY_TABLE[self.carriage]]
+            return ['运费-电气化', 0.2 * QUANTITY_TABLE[self.carriage]]
         if self.carriage == 'T40':
-            return ['电气化费', 0.4 * QUANTITY_TABLE[self.carriage]]
+            return ['运费-电气化', 0.4 * QUANTITY_TABLE[self.carriage]]
         fee = self.dqh_price * self.dqh_mile * QUANTITY_TABLE[self.carriage]
-        return ['电气化费', round(fee, 1)]
+        return ['运费-电气化', round(fee, 1)]
 
 
 def get_guotie_mile(tks_fee, kz_fee):
@@ -221,15 +226,11 @@ def get_dqh_mile(guotie_mile, nsh_fee):
 
 
 def get_stamp_duty(freight_list):
-    sum_ = 0
+    cost = 0
     for i in freight_list:
-        if i[0] == '建设基金':
-            continue
-        if '装卸费' in i[0]:
-            sum_ += round(i[1] / 106 * 100, 2)
-        else:
-            sum_ += round(i[1] / 109 * 100, 2)
-    duty = round(sum_ * 5 / 10000, 1)
+        if '运费' in i[0]:
+            cost += i[1]
+    duty = round((cost * 100 / 109) * 5 / 10000, 1)
     return ['印花税', duty]
 
 
