@@ -217,7 +217,7 @@ class FeeCrawler():
             data = {'fztmism': self.end_station_data['tmism']}
         resp = requests.post(url, json=data)
         if resp.status_code != 200 or resp.json()['msg'] != 'OK':
-            msg = f'查询失败!return code: {resp.status_code}. retrun msg:{resp.json()["msg"]}'
+            msg = f'查询{data["hzpm"]}失败!return code: {resp.status_code}. retrun msg:{resp.json()["msg"]}'
             raise KeyError(msg)
         sublines = resp.json()['data'].get('zyxInfoList')
         if sublines is None or len(sublines) == 0:
@@ -244,12 +244,6 @@ class FeeCrawler():
 
     @wait_for
     def query_calculate_base_fee(self, cargo):
-        self.refresh_query_code_and_cookie()
-        # check property ready
-        missing_properties = self.get_missing_properties()
-        if any(missing_properties):
-            raise KeyError(f'following properties are not ready:{missing_properties}')
-        # set post data
         if cargo == '矿渣':
             self.set_cargo_by_data(KZ_Data)
         elif cargo == '铁矿石':
@@ -258,17 +252,7 @@ class FeeCrawler():
             self.set_cargo_by_data(NSH_Data)
         else:
             raise KeyError('cargo 不正确,请输入:矿渣,铁矿石, 尿素(化肥)')
-        data = self.get_post_data()
-        # set headers
-        length = len(json.dumps(data, ensure_ascii=False)) + 10
-        headers = create_headers_by(length, self.cookie)
-        url = 'https://ec.95306.cn/api/zx/businessFor/carriageCalculateNew'
-        resp = requests.post(url, headers=headers, json=data)
-        if resp.status_code != 200 or resp.json()['msg'] != 'OK':
-            msg = f'查询失败!return code: {resp.status_code}. retrun msg:{resp.json()["msg"]}'
-            raise KeyError(msg)
-        freight_list = resp.json()['data']['freightVoNewList']
-        return freight_list
+        return self.query_crt_fee()
 
     def get_post_data(self):
         data = {
@@ -323,19 +307,23 @@ class FeeCrawler():
         return [k for k, v in necessary_datas.items() if v is None]
 
     def query_crt_fee_by_cargo(self, cargo, start_stn_load=False, end_stn_discharge=False):
-        missing_properties = self.get_missing_properties()
-        if any(missing_properties):
-            raise KeyError(f'following properties are not ready:{missing_properties}')
         self.start_station_load = start_stn_load
         self.end_station_discharge = end_stn_discharge
         self.set_cargo_by_name(cargo)
+        return self.query_crt_fee()
+
+    def query_crt_fee(self):
+        self.refresh_query_code_and_cookie()
+        missing_properties = self.get_missing_properties()
+        if any(missing_properties):
+            raise KeyError(f'following properties are not ready:{missing_properties}')
         data = self.get_post_data()
         length = len(json.dumps(data, ensure_ascii=False)) + 10
         headers = create_headers_by(length, self.cookie)
         url = 'https://ec.95306.cn/api/zx/businessFor/carriageCalculateNew'
         resp = requests.post(url, headers=headers, json=data)
         if resp.status_code != 200 or resp.json()['msg'] != 'OK':
-            print(f'查询失败!return code: {resp.status_code}. retrun msg:{resp.json()["msg"]}')
+            print(f'查询{data["hzpm"]}失败!return code: {resp.status_code}. retrun msg:{resp.json()["msg"]}')
             return None
         return resp.json()['data']['freightVoNewList']
 

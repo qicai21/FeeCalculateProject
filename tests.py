@@ -42,7 +42,6 @@ class CalculatorTest(unittest.TestCase):
         diff = abs(freight['运费总价'] - estimate_freight)
         self.assertTrue(diff < 0.2)
 
-    @unittest.skip
     def test_support_loading_usage_subline_fee(self):
         # loading fee: 装卸费, usage fee:集装箱使用费, subline fee 专用线取送车费.
         start = '高桥镇'
@@ -56,10 +55,9 @@ class CalculatorTest(unittest.TestCase):
                                   end_station_discharge=True)
         est_freight_items = [
             '运费总价', '国铁正线运费', '建设基金', '运费-电气化',
-            '集装箱使用费', '到站取送车费', '货车占用费', '到站装卸费', '印花税'
+            '集装箱使用费', '到站取送车费', '到站装卸费', '印花税'
         ]
-        # self.assertListEqual(list(freight), est_freight_items)
-        print(freight)
+        self.assertListEqual(list(freight), est_freight_items)
         '''
         est_freight = 5455.6
         est_stamp = 2.5
@@ -67,9 +65,8 @@ class CalculatorTest(unittest.TestCase):
         est_usage = 130
         est_subline_fee = 81
         est_discharge_fee = 390
-        est_occupy_fee = 5.7 * 16
         '''
-        est_ttl = 5455.6 + 2.5 + 759.8 + 130 + 81 + 390 + 5.7 * 16
+        est_ttl = 5455.6 + 2.5 + 759.8 + 130 + 81 + 390
         self.assertTrue(abs(freight['运费总价'] - est_ttl) < 0.2)
 
 
@@ -153,11 +150,29 @@ class CrawlerTest(unittest.TestCase):
         self.assertEqual(subline, '内蒙古平庄煤业（集团）有限责任公司专用铁路')
         self.assertEqual(mile, 0)
 
+    @unittest.skip
     def test_set_load_fee_then_get_correct_post_data(self):
         crl = FeeCrawler()
         crl.start_station_load = True
         post_data = crl.get_post_data()
         self.assertEqual(post_data['fztlzx'], '1')
+
+    @unittest.skip
+    def test_query_load_fee(self):
+        crl = FeeCrawler()
+        crl.set_start_station('高桥镇')
+        crl.set_end_station('元宝山')
+        cargo_data = {
+            "dm": "0410013", "pym": "TKS", "pmhz": "铁矿石", "ldjh": "21",
+            'wpdm': 'null', 'jzz': 'null', 'ifszjf': 'null', 'plhz': 'null',
+            "jzxjh": "0", "zcjh": "4", "shpmsspmdm": "0410013", "ifshpm": "0",
+            "shpmhz": "铁矿石", "shpmpym": "TKS"
+        }
+        crl.set_cargo_by_data(cargo_data)
+        crl.start_station_load = True
+        cost_list = crl.query_crt_fee()
+        print(cost_list)
+        self.assertEqual(float(cost_list[0]['loadCost']) / 60, 15.1)
 
 
 if __name__ == '__main__':

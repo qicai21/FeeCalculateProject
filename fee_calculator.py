@@ -147,15 +147,30 @@ class FeeCalculator:  # pylint: disable-msg=too-many-instance-attributes
         return 0
 
     def start_load_fee(self):
-        fee = self.query_load_fee()
+        fee = self.query_load_fee('start')
         return ['发站装卸费', fee]
 
     def end_discharge_fee(self):
-        fee = self.query_load_fee()
+        fee = self.query_load_fee('end')
         return ['到站装卸费', fee]
     
-    def query_load_fee(self):
-        return 100
+    def query_load_fee(self, start_or_end):
+        if self.carriage == 'T40':
+            fee = 292.5
+        elif self.carriage in ['T20', 'TBJU35']:
+            fee = 390
+        elif self.carriage in ['C60', 'C61', 'C70']:
+            weight = int(self.carriage[1:])
+            if start_or_end == 'start':
+                self.crawler.start_station_load = True
+            if start_or_end == 'end':
+                self.crawler.end_station_discharge = True
+            self.crawler.set_cargo_by_data(self.cargo_data)
+            data = self.crawler.query_crt_fee()
+            fee = float(data[0]['loadCost']) / 60 * weight
+        else:
+            raise KeyError('运输方式设置有误,查询装卸费失败')
+        return fee
 
     def container_usage_fee(self):
         cost = 70
