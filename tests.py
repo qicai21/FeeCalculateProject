@@ -42,6 +42,7 @@ class CalculatorTest(unittest.TestCase):
         diff = abs(freight['运费总价'] - estimate_freight)
         self.assertTrue(diff < 0.2)
 
+    @unittest.skip
     def test_support_loading_usage_subline_fee(self):
         # loading fee: 装卸费, usage fee:集装箱使用费, subline fee 专用线取送车费.
         start = '高桥镇'
@@ -151,6 +152,12 @@ class CrawlerTest(unittest.TestCase):
         subline, mile = crl.query_subline_miles('end')
         self.assertEqual(subline, '内蒙古平庄煤业（集团）有限责任公司专用铁路')
         self.assertEqual(mile, 0)
+
+    def test_set_load_fee_then_get_correct_post_data(self):
+        crl = FeeCrawler()
+        crl.start_station_load = True
+        post_data = crl.get_post_data()
+        self.assertEqual(post_data['fztlzx'], '1')
 
 
 if __name__ == '__main__':

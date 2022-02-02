@@ -73,8 +73,8 @@ class FeeCrawler():
         self.cargo_data = None
         self.cargo_code = None
 
-        self.start_station_load_fee = '0'
-        self.end_station_discharge_fee = '0'
+        self.start_station_load = False
+        self.end_station_discharge = False
 
         self.used_query_codes = []
         self.used_tokens = []
@@ -289,10 +289,10 @@ class FeeCrawler():
             'token': self.token,
             'dz': self.end_station_code,
             'dzljm': self.end_lj_code,
-            'dztlzx': self.end_station_discharge_fee,  # 到站装卸
+            'dztlzx': '1' if self.end_station_discharge else '0',  # 到站装卸
             'fz': self.start_station_code,
             'fzljm': self.start_lj_code,
-            'fztlzx': self.start_station_load_fee,  # 发站装卸
+            'fztlzx': '1' if self.start_station_load else '0',  # 发站装卸
             'hzpm': self.cargo_name,
             'pm': self.cargo_code,
             'shsm': '0',  # 送货上门
@@ -326,10 +326,8 @@ class FeeCrawler():
         missing_properties = self.get_missing_properties()
         if any(missing_properties):
             raise KeyError(f'following properties are not ready:{missing_properties}')
-        if start_stn_load:
-            self.start_station_load_fee = '1'
-        if end_stn_discharge:
-            self.end_station_discharge_fee = '1'
+        self.start_station_load = start_stn_load
+        self.end_station_discharge = end_stn_discharge
         self.set_cargo_by_name(cargo)
         data = self.get_post_data()
         length = len(json.dumps(data, ensure_ascii=False)) + 10
