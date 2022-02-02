@@ -25,11 +25,12 @@ class CalculatorTest(unittest.TestCase):
         self.assertEqual(jjlc_2 - jjlc_1, 14)
 
     @unittest.skip('确定成功')
-    def test_guonei_station_raise_notimplementederror(self):
+    def test_guonei_station_raise_attributeerror(self):
         cal = FeeCalculator()
-        with self.assertRaises(NotImplementedError):
+        with self.assertRaises(AttributeError):
             cal.set_from_to_stations('四平', '古冶')
 
+    @unittest.skip
     def test_calculator_get_correct_freight(self):
         start = '元宝山'
         end = '金帛湾'
@@ -40,6 +41,35 @@ class CalculatorTest(unittest.TestCase):
         estimate_freight = 3322 + 1.8 + 1005.1 + 556.5
         diff = abs(freight['运费总价'] - estimate_freight)
         self.assertTrue(diff < 0.2)
+
+    def test_support_loading_usage_subline_fee(self):
+        # loading fee: 装卸费, usage fee:集装箱使用费, subline fee 专用线取送车费.
+        start = '高桥镇'
+        end = '松原'
+        subline = '嘉吉生化有限公司专用线'
+        cargo = '尿素(化肥)'
+        carriage = 'T20'
+        cal = FeeCalculator()
+        freight = cal.get_freight(start, end, cargo, carriage,
+                                  end_subline=subline,
+                                  end_station_discharge=True)
+        est_freight_items = [
+            '运费总价', '国铁正线运费', '建设基金', '运费-电气化',
+            '集装箱使用费', '到站取送车费', '货车占用费', '到站装卸费', '印花税'
+        ]
+        # self.assertListEqual(list(freight), est_freight_items)
+        print(freight)
+        '''
+        est_freight = 5455.6
+        est_stamp = 2.5
+        est_jj = 759.8
+        est_usage = 130
+        est_subline_fee = 81
+        est_discharge_fee = 390
+        est_occupy_fee = 5.7 * 16
+        '''
+        est_ttl = 5455.6 + 2.5 + 759.8 + 130 + 81 + 390 + 5.7 * 16
+        self.assertTrue(abs(freight['运费总价'] - est_ttl) < 0.2)
 
 
 class CrawlerTest(unittest.TestCase):
@@ -79,7 +109,7 @@ class CrawlerTest(unittest.TestCase):
     @unittest.skip('确定成功')
     def test_query_cgo_and_set_cgo_data(self):
         crl = FeeCrawler()
-        crl.set_cargo('化肥')
+        crl.set_cargo_by_name('化肥')
         self.assertEqual(crl.cargo_name, '尿素(化肥)')
         self.assertEqual(crl.cargo_data['pym'], 'NSH')
         self.assertEqual(crl.cargo_code, '1310013')
@@ -87,7 +117,7 @@ class CrawlerTest(unittest.TestCase):
     @unittest.skip('确定成功')
     def test_query_price_post_data_format_and_code_token_is_correct(self):
         crl = FeeCrawler()
-        crl.set_cargo('尿素(化肥)')
+        crl.set_cargo_by_name('尿素(化肥)')
         crl.set_start_station('高桥镇')
         crl.set_end_station('四平')
         formated_data_keys = [
@@ -112,6 +142,15 @@ class CrawlerTest(unittest.TestCase):
         result = crl.query_crt_fee_by_cargo('尿素(化肥)')
         bulk_freight_ttl = result[0]['totalCost']
         self.assertEqual(float(bulk_freight_ttl), 3812.10)
+
+    @unittest.skip
+    def test_query_subline_return_name_and_mile(self):
+        crl = FeeCrawler()
+        crl.set_start_station('高桥镇')
+        crl.set_end_station('元宝山')
+        subline, mile = crl.query_subline_miles('end')
+        self.assertEqual(subline, '内蒙古平庄煤业（集团）有限责任公司专用铁路')
+        self.assertEqual(mile, 0)
 
 
 if __name__ == '__main__':

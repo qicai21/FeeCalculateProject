@@ -31,6 +31,8 @@ QUANTITY_TABLE = {
     'TBJU35': 64
 }
 
+PORTS = ['鲅鱼圈北', '金帛湾', '高桥镇', '马仗房']
+
 
 class FeeCalculator:  # pylint: disable-msg=too-many-instance-attributes
     def __init__(self):
@@ -50,8 +52,13 @@ class FeeCalculator:  # pylint: disable-msg=too-many-instance-attributes
         self.guotie_price_2 = 0
         self.jj_price = 0
         self.dqh_price = 0
+        self.start_subline = None
+        self.end_subline = None
 
-    def get_freight(self, start, end, cargo, carriage, discount=0):  # pylint: disable-msg=too-many-arguments
+    def get_freight(self, start, end, cargo, carriage,  # pylint: disable-msg=too-many-arguments
+                    discount=0, discount_plan=None,
+                    start_subline=None, end_subline=None,
+                    start_station_load=False, end_station_discharge=False):
         if self.query_stations is None:
             self.set_from_to_stations(start, end)
         elif self.query_stations[0] != start and self.query_stations[1] == end:
@@ -64,9 +71,25 @@ class FeeCalculator:  # pylint: disable-msg=too-many-instance-attributes
             pass
         # 之后补全discount的相关部分
         discount = 1 - discount
-        return self.get_freight_of_current_stations(cargo, carriage)
+        return self.get_freight_of_current_stations(
+            cargo, carriage, discount, discount_plan,
+            start_subline, end_subline,
+            start_station_load, end_station_discharge
+        )
 
-    def get_freight_of_current_stations(self, cargo, carriage):
+    def get_freight_of_current_stations(
+        self, cargo, carriage,
+        discount=0, discount_plan=None,
+        start_subline=None, end_subline=None,
+        start_station_load=False, end_station_discharge=False
+    ):  # pylint: disable-msg=too-many-arguments
+        """
+        发到站如果是港口,则无论该站装卸费是否为True都不计算.
+        计算装卸费就添加装卸费的计算方法.
+        如果是集装箱就添加集装箱使用费的计算方法.
+        如果有专用线就添加专用线的计算方法.
+        """
+
         self.cargo_data = self.crawler.query_cargo_by_name(cargo)
         self.cargo = self.cargo_data['pmhz']
         self.carriage = carriage
@@ -75,6 +98,18 @@ class FeeCalculator:  # pylint: disable-msg=too-many-instance-attributes
         else:
             key = 'bulk_' + self.cargo_data['zcjh']
         self.guotie_price_1, self.guotie_price_2, self.jj_price, self.dqh_price = PRICE_TABLE[key]
+        if self.carriage in ['T20', 'T40', 'TBJU35']:
+            self.freight_list.append(self.container_usage_fee)
+        if start_subline:
+            self.start_subline = start_subline
+            self.freight_list.append(self.start_subline_fee)
+        if end_subline:
+            self.end_subline = end_subline
+            self.freight_list.append(self.end_subline_fee)
+        if start_station_load and self.start_station not in PORTS:
+            self.freight_list.append(self.start_load_fee)
+        if end_station_discharge and self.end_station not in PORTS:
+            self.freight_list.append(self.end_discharge_fee)
         result = [cal_func() for cal_func in self.freight_list]
         stamp_duty = get_stamp_duty(result)
         result.append(stamp_duty)
@@ -88,6 +123,48 @@ class FeeCalculator:  # pylint: disable-msg=too-many-instance-attributes
         for i in result:
             freight_table[i[0]] = i[1]
         return freight_table
+
+    def start_subline_fee(self):
+        fee = self.query_subline_fee('start', self.start_subline)
+        return ['发站取送车费', fee]
+
+    def end_subline_fee(self):
+        fee = self.query_subline_fee('end', self.end_subline)
+        return ['到站取送车费', fee]
+
+    def query_subline_fee(self, start_or_end, subline):
+        result = self.crawler.query_subline_miles(start_or_end, subline)
+        if result:
+            name, miles = result
+            if start_or_end == 'start':
+                self.start_subline = name
+            if start_or_end == 'end':
+                self.end_subline = name
+            miles = miles * 2 / 1000
+            if miles % 1 != 0:
+                miles = int(miles) + 1
+            return 8.1 * miles
+        return 0
+
+    def start_load_fee(self):
+        fee = self.query_load_fee()
+        return ['发站装卸费', fee]
+
+    def end_discharge_fee(self):
+        fee = self.query_load_fee()
+        return ['到站装卸费', fee]
+    
+    def query_load_fee(self):
+        return 100
+
+    def container_usage_fee(self):
+        cost = 70
+        remains = self.guotie_mile - 250
+        while remains > 0:
+            cost += 12
+            remains -= 100
+        price = round(cost, 1)
+        return ['集装箱使用费', price]
 
     def set_from_to_stations(self, start_station=None, end_station=None):
         if start_station is None and end_station is None:

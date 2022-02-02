@@ -209,6 +209,40 @@ class FeeCrawler():
         self.cargo_code = cargo_data['dm']
 
     @wait_for
+    def query_subline_miles(self, start_or_end, subline_name=None):
+        url = 'https://ec.95306.cn/api/zx/czmpxx/queryByTimism'
+        if start_or_end == 'start':
+            data = {'fztmism': self.start_station_data['tmism']}
+        if start_or_end == 'end':
+            data = {'fztmism': self.end_station_data['tmism']}
+        resp = requests.post(url, json=data)
+        if resp.status_code != 200 or resp.json()['msg'] != 'OK':
+            msg = f'查询失败!return code: {resp.status_code}. retrun msg:{resp.json()["msg"]}'
+            raise KeyError(msg)
+        sublines = resp.json()['data'].get('zyxInfoList')
+        if sublines is None or len(sublines) == 0:
+            print(f'{self.start_station_name}站下没有任何专用线.')
+            return None
+        sublines_data = {}
+        for line in sublines:
+            sublines_data[line['zyxName']] = line['zyxQsclc']
+        names = list(sublines_data)
+        names_txt = ', '.join([f'{i}: {n};' for i, n in zip(range(len(names)), names)])
+        msg = ('查询到如下专用线:' + names_txt + '输入序号选定专用线')
+        if subline_name:
+            if subline_name in names:
+                name = subline_name
+            else:
+                msg = subline_name + '不存在,' + msg
+                index = int(input(msg))
+                name = names[index]
+        else:
+            index = int(input(msg))
+            name = names[index]
+        mile = float(sublines_data[name])
+        return name, mile
+
+    @wait_for
     def query_calculate_base_fee(self, cargo):
         self.refresh_query_code_and_cookie()
         # check property ready
