@@ -143,7 +143,7 @@ class FeeCalculator:  # pylint: disable-msg=too-many-instance-attributes
             miles = miles * 2 / 1000
             if miles % 1 != 0:
                 miles = int(miles) + 1
-            return 8.1 * miles
+            return round(8.1 * miles, 1)
         return 0
 
     def start_load_fee(self):
@@ -170,11 +170,14 @@ class FeeCalculator:  # pylint: disable-msg=too-many-instance-attributes
             fee = float(data[0]['loadCost']) / 60 * weight
         else:
             raise KeyError('运输方式设置有误,查询装卸费失败')
-        return fee
+        return round(fee, 1)
 
     def container_usage_fee(self):
         cost = 70
         remains = self.guotie_mile - 250
+        for station in self.query_stations:
+            if station in LOCAL_STATIONS:
+                remains += get_local_contaion_usage_miles(station)
         while remains > 0:
             cost += 12
             remains -= 100
@@ -241,7 +244,9 @@ class FeeCalculator:  # pylint: disable-msg=too-many-instance-attributes
             self.freight_list.append(lambda: ['货车占用费', hrs * 5.7])
        
     def byq_fee(self):
-        price = self.guotie_price_2 + self.dqh_price
+        price = self.guotie_price_2
+        if self.carriage in ['C60', 'C61', 'C70', 'TBJU35']:
+            price += self.dqh_price
         fee = price * 14 * QUANTITY_TABLE[self.carriage] * self.get_base_rate()
         fee = round(fee, 1)
         return ['沙鲅运费', fee]
@@ -325,6 +330,15 @@ def get_stamp_duty(freight_list):
             cost += i[1]
     duty = round((cost * 100 / 109) * 5 / 10000, 1)
     return ['印花税', duty]
+
+
+def get_local_contaion_usage_miles(station):
+    miles_table = {
+        '鲅鱼圈北': 14,
+        '金帛湾': 48,
+        '珲春南': 73,
+    }
+    return miles_table[station]
 
 
 if __name__ == '__main__':

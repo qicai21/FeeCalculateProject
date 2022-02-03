@@ -29,7 +29,7 @@ NSH_Data = {
 def wait_for(condition_func):
     def wrap(*args, **kwargs):
         delay = 0.5
-        max_delay = 2
+        max_delay = 5
         inner_exp_msg = None
         while delay < max_delay:
             try:
@@ -37,11 +37,11 @@ def wait_for(condition_func):
                 if result:
                     return result
                 time.sleep(delay)
-                delay += 0.1
+                delay += 0.5
             except KeyError as exp:
                 inner_exp_msg = str(exp)
                 time.sleep(delay)
-                delay += 0.1
+                delay += 0.5
         inner_exp_msg = '执行多次均未能刷新' if not inner_exp_msg else inner_exp_msg
         raise Exception(
             '执行{}超时,错误信息如下:'.format(condition_func.__name__), inner_exp_msg
@@ -98,6 +98,7 @@ class FeeCrawler():
         self.token = token
         self.used_tokens.append(token)
         self.used_query_codes.append(query_code)
+        time.sleep(1.5)
         return True
 
     def send_cargo_name_request(self, name):
@@ -215,6 +216,7 @@ class FeeCrawler():
             data = {'fztmism': self.start_station_data['tmism']}
         if start_or_end == 'end':
             data = {'fztmism': self.end_station_data['tmism']}
+        data = replace_tmism_if_station_is_port_station(data)
         resp = requests.post(url, json=data)
         if resp.status_code != 200 or resp.json()['msg'] != 'OK':
             msg = f'查询{data["hzpm"]}失败!return code: {resp.status_code}. retrun msg:{resp.json()["msg"]}'
@@ -242,7 +244,6 @@ class FeeCrawler():
         mile = float(sublines_data[name])
         return name, mile
 
-    @wait_for
     def query_calculate_base_fee(self, cargo):
         if cargo == '矿渣':
             self.set_cargo_by_data(KZ_Data)
@@ -312,6 +313,7 @@ class FeeCrawler():
         self.set_cargo_by_name(cargo)
         return self.query_crt_fee()
 
+    @wait_for
     def query_crt_fee(self):
         self.refresh_query_code_and_cookie()
         missing_properties = self.get_missing_properties()
@@ -358,6 +360,14 @@ def create_headers_by(data_length, cookie_str):
                        'Safari/537.36'),
         'Cookie': cookie_str
     }
+
+
+def replace_tmism_if_station_is_port_station(data):
+    if data['fztmism'] == '53687':  # 沙岗--鲅鱼圈北
+        return {'fztmism': '54329'}
+    if data['fztmism'] == '51998':  # 渤海--金帛湾
+        return {'fztmism': '54329'}
+    return data
 
 
 if __name__ == '__main__':
