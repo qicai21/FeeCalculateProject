@@ -98,7 +98,6 @@ class FeeCrawler():
         self.token = token
         self.used_tokens.append(token)
         self.used_query_codes.append(query_code)
-        time.sleep(1.5)
         return True
 
     def send_cargo_name_request(self, name):
@@ -148,13 +147,16 @@ class FeeCrawler():
             return None
         return resp_json['data'][0]
 
-    def set_start_station(self, name, limited_lj=None):
-        resp_data = self.query_station_by_name(name)
-        self.start_station_code = resp_data['dbm']
-        self.start_station_name = resp_data['hzzm']
-        self.start_station_data = resp_data
-        self.start_lj_code = resp_data['ljm']
-        start_lj_name = resp_data['ljqc']
+    def set_start_station(self, name, limited_lj=None, destine_station_data=None):
+        if destine_station_data:
+            station_data = destine_station_data
+        else:
+            station_data = self.query_station_by_name(name)
+        self.start_station_code = station_data['dbm']
+        self.start_station_name = station_data['hzzm']
+        self.start_station_data = station_data
+        self.start_lj_code = station_data['ljm']
+        start_lj_name = station_data['ljqc']
         if limited_lj and start_lj_name not in limited_lj:
             raise AttributeError(f'{name} 不是{limited_lj}中的站.')
         lj_data = self.send_lj_request(start_lj_name)
@@ -163,13 +165,16 @@ class FeeCrawler():
         else:
             raise AttributeError('路局数据获取失败')
 
-    def set_end_station(self, name, limited_lj=None):
-        resp_data = self.query_station_by_name(name)
-        self.end_station_code = resp_data['dbm']
-        self.end_station_name = resp_data['hzzm']
-        self.end_station_data = resp_data
-        self.end_lj_code = resp_data['ljm']
-        end_lj_name = resp_data['ljqc']
+    def set_end_station(self, name, limited_lj=None, destine_station_data=None):
+        if destine_station_data:
+            station_data = destine_station_data
+        else:
+            station_data = self.query_station_by_name(name)
+        self.end_station_code = station_data['dbm']
+        self.end_station_name = station_data['hzzm']
+        self.end_station_data = station_data
+        self.end_lj_code = station_data['ljm']
+        end_lj_name = station_data['ljqc']
         if limited_lj and end_lj_name not in limited_lj:
             raise AttributeError(f'{name} 不是{limited_lj}中的站.')
         data = self.send_lj_request(end_lj_name)
@@ -316,6 +321,7 @@ class FeeCrawler():
     @wait_for
     def query_crt_fee(self):
         self.refresh_query_code_and_cookie()
+        time.sleep(0.8)  # 等待1秒钟,否则刷新太快导致95306服务器没有加载完新的token,导致400错误.
         missing_properties = self.get_missing_properties()
         if any(missing_properties):
             raise KeyError(f'following properties are not ready:{missing_properties}')

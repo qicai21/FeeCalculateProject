@@ -4,12 +4,21 @@ from fee_crawler import FeeCrawler
 COAL_LIST = ['风化煤', '粉煤', '蜂窝煤', '褐块煤', '褐煤',
              '混煤', '红煤粉', '块煤', '炼焦烟煤', '煤粉',
              '煤矸石', '末煤', '其他煤', '水煤浆', '筛选粉煤',
-             '筛选混煤', '筛选块煤']
+             '筛选混煤', '筛选块煤', '原煤']
 
-LOCAL_STATIONS = {
-    '鲅鱼圈北': '沙岗',
-    '金帛湾': '渤海',
-    '珲春南': '图们',
+LOCAL_STATION_DATA = {
+    '鲅鱼圈北': {
+        'tmism': '53687', 'dbm': 'SGT', 'hzzm': '沙岗', 'pym': 'SG',
+        'ljdm': 'T00', 'ljqc': '沈阳局', 'dzm': '02', 'ljm': '00002'
+    },
+    '金帛湾': {
+        "tmism": "51998", "dbm": "BED", "hzzm": "渤海", "pym": "BH",
+        "ljdm": "T00", "ljqc": "沈阳局", "dzm": "02", "ljm": "00002"
+    },
+    '珲春南': {
+        'tmism': '62465', 'dbm': 'TML', 'hzzm': '图们', 'pym': 'TM',
+        'ljdm': 'T00', 'ljqc': '沈阳局', 'dzm': '02', 'ljm': '00002'
+    },
 }
 
 PRICE_TABLE = {
@@ -59,6 +68,7 @@ class FeeCalculator:  # pylint: disable-msg=too-many-instance-attributes
                     discount=0, discount_plan=None,
                     start_subline=None, end_subline=None,
                     start_station_load=False, end_station_discharge=False):
+        self.carriage = carriage  # 因为锦州港的货车占用费与运输方式有关,敞车有,集装箱没有,所以,此处要预加载carriage.
         if self.query_stations is None:
             self.set_from_to_stations(start, end)
         elif self.query_stations[0] != start and self.query_stations[1] == end:
@@ -163,7 +173,9 @@ class FeeCalculator:  # pylint: disable-msg=too-many-instance-attributes
             weight = int(self.carriage[1:])
             if start_or_end == 'start':
                 self.crawler.start_station_load = True
+                self.crawler.end_station_discharge = False
             if start_or_end == 'end':
+                self.crawler.start_station_load = False
                 self.crawler.end_station_discharge = True
             self.crawler.set_cargo_by_data(self.cargo_data)
             data = self.crawler.query_crt_fee()
@@ -176,7 +188,7 @@ class FeeCalculator:  # pylint: disable-msg=too-many-instance-attributes
         cost = 70
         remains = self.guotie_mile - 250
         for station in self.query_stations:
-            if station in LOCAL_STATIONS:
+            if station in LOCAL_STATION_DATA:
                 remains += get_local_contaion_usage_miles(station)
         while remains > 0:
             cost += 12
@@ -189,12 +201,14 @@ class FeeCalculator:  # pylint: disable-msg=too-many-instance-attributes
             raise KeyError('start_station and end_station不能同时为None')
         self.query_stations = (start_station, end_station)
         if start_station:
-            self.start_station = LOCAL_STATIONS.get(start_station, start_station)
-            self.crawler.set_start_station(self.start_station, self.available_lj)
+            start_stn_data = LOCAL_STATION_DATA.get(start_station)
+            self.start_station = start_stn_data['hzzm'] if start_stn_data else start_station
+            self.crawler.set_start_station(self.start_station, self.available_lj, start_stn_data)
 
         if end_station:
-            self.end_station = LOCAL_STATIONS.get(end_station, end_station)
-            self.crawler.set_end_station(self.end_station, self.available_lj)
+            end_stn_data = LOCAL_STATION_DATA.get(end_station)
+            self.end_station = end_stn_data['hzzm'] if end_stn_data else end_station
+            self.crawler.set_end_station(self.end_station, self.available_lj, end_stn_data)
         self.update_mile_args_by_crawler_and_reset_frieght_list()
         self.set_freight_list()
     
@@ -209,23 +223,15 @@ class FeeCalculator:  # pylint: disable-msg=too-many-instance-attributes
             self.append_hunchunnan_freight()
 
     def append_jinbowan_freight(self):
+        self.freight_list.append(self.jinbowan_fee)
+
+    def jinbowan_fee(self):
         if self.carriage == 'T20':
-            self.freight_list.append(self.jinbowan_t20_freight)
+            fee = 198 * QUANTITY_TABLE[self.carriage]
         elif self.cargo in COAL_LIST:
-            self.freight_list.append(self.jinbowan_coal_freight)
+            fee = 612.2 / 70 * QUANTITY_TABLE[self.carriage]
         else:
-            self.freight_list.append(self.jinbowan_general_freight)
-
-    def jinbowan_t20_freight(self):
-        fee = 198 * QUANTITY_TABLE[self.carriage]
-        return ['金渤运费', fee]
-
-    def jinbowan_coal_freight(self):
-        fee = 612.2 / 70 * QUANTITY_TABLE[self.carriage]
-        return ['金渤运费', fee]
-
-    def jinbowan_general_freight(self):
-        fee = 556.5 / 70 * QUANTITY_TABLE[self.carriage]
+            fee = 556.5 / 70 * QUANTITY_TABLE[self.carriage]
         return ['金渤运费', fee]
 
     def append_hunchunnan_freight(self):
@@ -238,10 +244,13 @@ class FeeCalculator:  # pylint: disable-msg=too-many-instance-attributes
         self.freight_list.append(self.byq_fee)
 
     def append_gaoqiaozhen_start_freight(self):
-        # 高桥镇发出货物,增加货车占用费,煤炭和尿素化肥16小时,其他8小时,集装箱免收.
         if self.carriage in ['C60', 'C61', 'C70']:
-            hrs = 16 if self.cargo in COAL_LIST else 16 if '化肥' in self.cargo else 8
-            self.freight_list.append(lambda: ['货车占用费', hrs * 5.7])
+            self.freight_list.append(self.gaoqiaozhen_occupy_fee)
+
+    def gaoqiaozhen_occupy_fee(self):
+        # 高桥镇发出货物,增加货车占用费,煤炭和尿素化肥16小时,其他8小时,集装箱免收.
+        hrs = 16 if self.cargo in COAL_LIST else 16 if '化肥' in self.cargo else 8
+        return ['货车占用费', hrs * 5.7]
        
     def byq_fee(self):
         price = self.guotie_price_2
@@ -250,13 +259,6 @@ class FeeCalculator:  # pylint: disable-msg=too-many-instance-attributes
         fee = price * 14 * QUANTITY_TABLE[self.carriage] * self.get_base_rate()
         fee = round(fee, 1)
         return ['沙鲅运费', fee]
-
-    def raise_error_if_station_outof_dongbei(self, stations):
-        for stn in stations:
-            station_data = self.crawler.query_station_by_name(stn)
-            if station_data['ljdm'] not in self.available_ljdm:
-                raise NotImplementedError(f'{stn}是关内站,暂不支持.')
-        return True
 
     def update_mile_args_by_crawler_and_reset_frieght_list(self):
         kz_fee = self.get_bulk_fee('矿渣')
