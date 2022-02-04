@@ -224,7 +224,7 @@ class FeeCrawler():
         data = replace_tmism_if_station_is_port_station(data)
         resp = requests.post(url, json=data)
         if resp.status_code != 200 or resp.json()['msg'] != 'OK':
-            msg = f'查询{data["hzpm"]}失败!return code: {resp.status_code}. retrun msg:{resp.json()["msg"]}'
+            msg = f'查询{data["hzpm"]}失败! code: {resp.status_code}. retrun msg:{resp.json()["msg"]}'
             raise KeyError(msg)
         sublines = resp.json()['data'].get('zyxInfoList')
         if sublines is None or len(sublines) == 0:
@@ -331,7 +331,7 @@ class FeeCrawler():
         url = 'https://ec.95306.cn/api/zx/businessFor/carriageCalculateNew'
         resp = requests.post(url, headers=headers, json=data)
         if resp.status_code != 200 or resp.json()['msg'] != 'OK':
-            print(f'查询{data["hzpm"]}失败!return code: {resp.status_code}. retrun msg:{resp.json()["msg"]}')
+            print(f'查询{data["hzpm"]}失败! code: {resp.status_code}. retrun msg:{resp.json()["msg"]}')
             return None
         return resp.json()['data']['freightVoNewList']
 
