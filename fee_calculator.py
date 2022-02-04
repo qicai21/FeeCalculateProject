@@ -1,6 +1,12 @@
 from fee_crawler import FeeCrawler
 
 
+DISCOUNT_DATA_LIST = {
+    'sy220808a': {'基础运费': 0.4, '铁路建设基金': 0.4, '电气化附加费': 1,
+                  '集装箱使用费': 0, '发站取送车费': 1, '到站取送车费': 1,
+                  '发站装卸费': 0.7, '到站装卸费': 0.7},
+}
+
 COAL_LIST = ['风化煤', '粉煤', '蜂窝煤', '褐块煤', '褐煤',
              '混煤', '红煤粉', '块煤', '炼焦烟煤', '煤粉',
              '煤矸石', '末煤', '其他煤', '水煤浆', '筛选粉煤',
@@ -63,9 +69,11 @@ class FeeCalculator:  # pylint: disable-msg=too-many-instance-attributes
         self.dqh_price = 0
         self.start_subline = None
         self.end_subline = None
+        self.discount_rate = 1
+        self.discount_no = None
 
     def get_freight(self, start, end, cargo, carriage,  # pylint: disable-msg=too-many-arguments
-                    discount=0, discount_plan=None,
+                    discount_rate=1, discount_no=None,
                     start_subline=None, end_subline=None,
                     start_station_load=False, end_station_discharge=False):
         self.carriage = carriage  # 因为锦州港的货车占用费与运输方式有关,敞车有,集装箱没有,所以,此处要预加载carriage.
@@ -79,17 +87,15 @@ class FeeCalculator:  # pylint: disable-msg=too-many-instance-attributes
             self.set_from_to_stations(start, end)
         else:
             pass
-        # 之后补全discount的相关部分
-        discount = 1 - discount
         return self.get_freight_of_current_stations(
-            cargo, carriage, discount, discount_plan,
+            cargo, carriage, discount_rate, discount_no,
             start_subline, end_subline,
             start_station_load, end_station_discharge
         )
 
     def get_freight_of_current_stations(
         self, cargo, carriage,
-        discount=0, discount_plan=None,
+        discount_rate=1, discount_no=None,
         start_subline=None, end_subline=None,
         start_station_load=False, end_station_discharge=False
     ):  # pylint: disable-msg=too-many-arguments
@@ -103,6 +109,7 @@ class FeeCalculator:  # pylint: disable-msg=too-many-instance-attributes
         self.cargo_data = self.crawler.query_cargo_by_name(cargo)
         self.cargo = self.cargo_data['pmhz']
         self.carriage = carriage
+        self.set_discount_rate(discount_rate, discount_no)
         if carriage in ['T20', 'T40']:
             key = carriage
         else:
@@ -134,13 +141,18 @@ class FeeCalculator:  # pylint: disable-msg=too-many-instance-attributes
             freight_table[i[0]] = i[1]
         return freight_table
 
+    def calculate_discount_with_one_decimal(self, fee_name, fee_value):
+        rate = self.get_discount_by_item(fee_name)
+        fee = round(fee_value * rate, 1)
+        return [fee_name, fee]
+
     def start_subline_fee(self):
         fee = self.query_subline_fee('start', self.start_subline)
-        return ['发站取送车费', fee]
+        return self.calculate_discount_with_one_decimal('发站取送车费', fee)
 
     def end_subline_fee(self):
         fee = self.query_subline_fee('end', self.end_subline)
-        return ['到站取送车费', fee]
+        return self.calculate_discount_with_one_decimal('到站取送车费', fee)
 
     def query_subline_fee(self, start_or_end, subline):
         result = self.crawler.query_subline_miles(start_or_end, subline)
@@ -158,11 +170,11 @@ class FeeCalculator:  # pylint: disable-msg=too-many-instance-attributes
 
     def start_load_fee(self):
         fee = self.query_load_fee('start')
-        return ['发站装卸费', fee]
+        return self.calculate_discount_with_one_decimal('发站装卸费', fee)
 
     def end_discharge_fee(self):
         fee = self.query_load_fee('end')
-        return ['到站装卸费', fee]
+        return self.calculate_discount_with_one_decimal('到站装卸费', fee)
     
     def query_load_fee(self, start_or_end):
         if self.carriage == 'T40':
@@ -193,8 +205,7 @@ class FeeCalculator:  # pylint: disable-msg=too-many-instance-attributes
         while remains > 0:
             cost += 12
             remains -= 100
-        price = round(cost, 1)
-        return ['集装箱使用费', price]
+        return self.calculate_discount_with_one_decimal('集装箱使用费', cost)
 
     def set_from_to_stations(self, start_station=None, end_station=None):
         if start_station is None and end_station is None:
@@ -232,13 +243,13 @@ class FeeCalculator:  # pylint: disable-msg=too-many-instance-attributes
             fee = 612.2 / 70 * QUANTITY_TABLE[self.carriage]
         else:
             fee = 556.5 / 70 * QUANTITY_TABLE[self.carriage]
-        return ['金渤运费', fee]
+        return self.calculate_discount_with_one_decimal('金渤运费', fee)
 
     def append_hunchunnan_freight(self):
         raise NotImplementedError('珲春南的待完善.')
 
     def append_byq_freight(self):
-        # 建设基金增加里程14公里
+        # 铁路建设基金增加里程14公里
         self.jj_mile += 14
         # 其他鲅鱼圈费用
         self.freight_list.append(self.byq_fee)
@@ -250,15 +261,14 @@ class FeeCalculator:  # pylint: disable-msg=too-many-instance-attributes
     def gaoqiaozhen_occupy_fee(self):
         # 高桥镇发出货物,增加货车占用费,煤炭和尿素化肥16小时,其他8小时,集装箱免收.
         hrs = 16 if self.cargo in COAL_LIST else 16 if '化肥' in self.cargo else 8
-        return ['货车占用费', hrs * 5.7]
+        return self.calculate_discount_with_one_decimal('货车占用费', hrs * 5.7)
        
     def byq_fee(self):
         price = self.guotie_price_2
         if self.carriage in ['C60', 'C61', 'C70', 'TBJU35']:
             price += self.dqh_price
         fee = price * 14 * QUANTITY_TABLE[self.carriage] * self.get_base_rate()
-        fee = round(fee, 1)
-        return ['沙鲅运费', fee]
+        return self.calculate_discount_with_one_decimal('沙鲅运费', fee)
 
     def update_mile_args_by_crawler_and_reset_frieght_list(self):
         kz_fee = self.get_bulk_fee('矿渣')
@@ -277,7 +287,7 @@ class FeeCalculator:  # pylint: disable-msg=too-many-instance-attributes
     def cal_guotie_fee(self):
         price = self.guotie_price_1 + self.guotie_price_2 * self.guotie_mile
         fee = price * QUANTITY_TABLE[self.carriage] * self.get_base_rate()
-        return ['国铁正线运费', round(fee, 1)]
+        return self.calculate_discount_with_one_decimal('基础运费', fee)
         
     def get_base_rate(self):
         """基础费率,区别于下浮."""
@@ -293,17 +303,61 @@ class FeeCalculator:  # pylint: disable-msg=too-many-instance-attributes
 
     def cal_jj_fee(self):
         if (self.carriage in ['C60', 'C61', 'C70', 'TBJU35']) and ('化肥' in self.cargo):
-            return ['建设基金', 0]
+            return ['铁路建设基金', 0]
         fee = self.jj_price * self.jj_mile * QUANTITY_TABLE[self.carriage] * self.get_base_rate()
-        return ['建设基金', round(fee, 1)]
+        return self.calculate_discount_with_one_decimal('铁路建设基金', fee)
 
     def cal_dqh_fee(self):
         if self.carriage == 'T20':
-            return ['运费-电气化', 0.2 * QUANTITY_TABLE[self.carriage]]
-        if self.carriage == 'T40':
-            return ['运费-电气化', 0.4 * QUANTITY_TABLE[self.carriage]]
-        fee = self.dqh_price * self.dqh_mile * QUANTITY_TABLE[self.carriage]
-        return ['运费-电气化', round(fee, 1)]
+            fee = 0.2 * QUANTITY_TABLE[self.carriage]
+        elif self.carriage == 'T40':
+            fee = 0.4 * QUANTITY_TABLE[self.carriage]
+        else:
+            fee = self.dqh_price * self.dqh_mile * QUANTITY_TABLE[self.carriage]
+        return self.calculate_discount_with_one_decimal('电气化附加费', fee)
+
+    def set_discount_rate(self, discount_rate=None, discount_no=None):
+        if discount_no:
+            self.discount_no = discount_no.lower()
+            self.discount_rate = DISCOUNT_DATA_LIST.get(self.discount_no)['基础运费']
+        elif discount_rate is None:
+            raise ValueError('discount_rate and discount_no can be None at same time.')
+        else:
+            if isinstance(discount_rate, float) and discount_rate < 1:
+                self.discount_rate = discount_rate
+            elif isinstance(discount_rate, str):
+                self.discount_rate = (1 - int(discount_rate) / 100)
+            elif type(discount_rate) in [int, float] and discount_rate > 1:
+                self.discount_rate = (1 - discount_rate / 100)
+            else:
+                raise ValueError('discount_rate类型有误,应为: float, int, str. int&str参考下浮比例,float是计算用值.')
+                
+    def get_discount_by_item(self, item_name):
+        """
+        基础运费 = F * (1-rate / 100)
+        铁路建设基金 = JJ * (1-rate / 100)
+        其他区段运费 = f * (1-rate / 100)
+        dqh = dqh * 1
+        集装箱使用费 = U * (1 - rate != 0)
+        货车占用费 = Oc * 1
+        取送车费 = QS * 1
+        装卸费 = 0.5 煤炭类,其他0.7
+        """
+        if self.discount_no:
+            discount_data = DISCOUNT_DATA_LIST.get(self.discount_no)
+            if discount_data:
+                return discount_data.get(item_name, 1)
+            raise AttributeError('设置了下浮号,但没有匹配的下浮数据.')
+        # 没有下浮号的使用常规下浮比例进行计算
+        if self.discount_rate == 1:
+            return 1
+        if '运费' in item_name or item_name == '铁路建设基金':
+            return self.discount_rate
+        if item_name == '集装箱使用费':
+            return 0
+        if '装卸费' in item_name:
+            return 0.5 if self.cargo in COAL_LIST else 0.7
+        return 1
 
 
 def get_guotie_mile(tks_fee, kz_fee):
@@ -328,7 +382,7 @@ def get_dqh_mile(guotie_mile, nsh_fee):
 def get_stamp_duty(freight_list):
     cost = 0
     for i in freight_list:
-        if '运费' in i[0]:
+        if '运费' in i[0] or (i[0] == '电气化附加费'):
             cost += i[1]
     duty = round((cost * 100 / 109) * 5 / 10000, 1)
     return ['印花税', duty]

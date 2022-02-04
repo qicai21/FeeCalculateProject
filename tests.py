@@ -42,6 +42,7 @@ class CalculatorTest(unittest.TestCase):
         diff = abs(freight['运费总价'] - estimate_freight)
         self.assertTrue(diff < 0.2)
 
+    @unittest.skip
     def test_support_loading_usage_subline_fee(self):
         # loading fee: 装卸费, usage fee:集装箱使用费, subline fee 专用线取送车费.
         start = '高桥镇'
@@ -54,7 +55,7 @@ class CalculatorTest(unittest.TestCase):
                                   end_subline=subline,
                                   end_station_discharge=True)
         est_freight_items = [
-            '运费总价', '国铁正线运费', '建设基金', '运费-电气化',
+            '运费总价', '基础运费', '铁路建设基金', '电气化附加费',
             '集装箱使用费', '到站取送车费', '到站装卸费', '印花税'
         ]
         self.assertListEqual(list(freight), est_freight_items)
@@ -68,6 +69,32 @@ class CalculatorTest(unittest.TestCase):
         '''
         est_ttl = 5455.6 + 2.5 + 759.8 + 130 + 81 + 390
         self.assertTrue(abs(freight['运费总价'] - est_ttl) < 0.2)
+
+    def test_get_freight_item_return_correct_discount(self):
+        item_rates = {'基础运费': 0.4, '铁路建设基金': 0.4, '电气化附加费': 1,
+                      '集装箱使用费': 0, '到站取送车费': 1, '到站装卸费': 0.7}
+        cal = FeeCalculator()
+        cal.cargo = '铁矿粉'
+        cal.discount_rate = 0.4
+        rate_list = [cal.get_discount_by_item(name) for name in item_rates]
+        self.assertListEqual(rate_list, list(item_rates.values()))
+        cal.cargo = '原煤'
+        discharge_discount = cal.get_discount_by_item('到站装卸费')
+        self.assertEqual(discharge_discount, 0.5)
+
+    def test_freight_calculated_with_discount_rate(self):
+        rate = '60'
+        start = '高桥镇'
+        end = '四平'
+        cargo = '铁矿粉'
+        carriage = 'TBJU35'
+        cal = FeeCalculator()
+        freight = cal.get_freight(start, end, cargo,
+                                  carriage, discount_rate=rate,
+                                  end_station_discharge=True)
+        estimate_freight = 2422.5
+        print(freight)
+        self.assertTrue(abs(freight['运费总价'] - estimate_freight) <= 0.2)
 
 
 class CrawlerTest(unittest.TestCase):
